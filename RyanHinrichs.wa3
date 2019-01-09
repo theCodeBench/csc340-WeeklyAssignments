@@ -1,0 +1,44 @@
+#!/bin/bash
+
+#This script looks for html files of the design "firstnameLastname.html" and extracts the classes
+#and information for the student pertaining to each class.  It then funnels this information into
+#a file named "firstnameLastname.txt".  
+#It does not account for duplicate classes, it records the information from both.
+
+ls *.html | 
+while read -r file; do 
+    filename=$(echo $file | sed -r 's/.{5}$//')
+    filename+=".xml"
+    rm $filename
+    echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" >> $filename
+    echo "<document>" >> $filename
+    cat $file | while read line
+    do
+        if [[ $line == *"<p id=\"VAR_STC_COURSE_NAME_"* ]]; then
+	    class="\t<Course>"
+            class+=$(echo $line | cut -d ">" -f 2 | cut -d "<" -f 1 | sed -re "s/\s+/:<Section>/" | sed -re "s/\s+/<\/Section>:<Title>/")
+	    class=$(echo $class | sed -re "s/:/\n\t\t/g" )
+	    echo -e "\t<Course>" >> $filename
+	    echo $line | cut -d ">" -f 2 | cut -d "<" -f 1 | sed -re "s/\s+/:<Section>/" | sed -re "s/\s+/<\/Section>:<Title>/" | sed -re "s/:/\n\t\t/g" >> $filename
+	    echo "</Title>" >> $filename
+        elif [[ $line == *"<p id=\"VAR_STC_VERIFIED_GRADE_"* ]]; then
+	    class="\t\t<Grade>"
+            class+=$(echo $line | cut -d ">" -f 2 | cut -d "<" -f 1)
+            class+="</Grade>"
+	    echo -e $class >> $filename
+        elif [[ $line == *"<p id=\"VAR_STC_CMPL_CRED_"* ]]; then
+	    class="\t\t<Credits>"
+            class+=$(echo $line | cut -d ">" -f 2 | cut -d "<" -f 1)
+            class+="</Credits>"
+	    echo -e $class >> $filename
+        elif [[ $line == *"<p id=\"VAR_STC_TERM_"* ]]; then
+	    class="\t\t<Semester>"
+            class+=$(echo $line | cut -d ">" -f 2 | cut -d "<" -f 1)
+	    class+="</Semester>"
+            echo -e $class >> $filename
+	    echo -e "\t</Course>" >> $filename
+        fi
+    done
+    echo "</document>" >> $filename
+done
+

@@ -1,0 +1,38 @@
+Your code wouldn't compile with the included makefile.  Check out the makefile
+examples on the class website:
+
+https://www.mcs.sdsmt.edu/csc340/Examples/Makefiles/
+
+It's handy to know.
+
+Wow, Luke.  Super overkill.
+
+All tests in the testMain.cpp file which makes it slow to iterate the
+test, fail, write, test cycle.  Refactor the testMain.cpp into individual
+test files for faster compiling.
+
+Multiple REQUIRE assertions per test which means the first failure causes
+the rest to not run.  This will slow down your fixing of problems if a change
+causes multiple failures.  The CHECK assertion reports a failure but allows
+the test to continue running.
+
+Looks like you wrote isEven first.  I can see info1(5) failing and maybe
+info2(10) failing.  Did any other test fail?  If so, what code did you add
+to make the pass?  Also, since you're calling isEven to decide on isOdd, did
+*any* of the isOdd passes fail?  If not, why are they in there?
+
+Redundant tests do not add to the confidence in the code.  You must watch a
+test fail before you're allowed to add any code otherwise you're just adding
+tests that will fail or pass with a bunch of other tests.  If a test cannot
+fail in isolation (i.e. without a number of other tests always also failing)
+then it's useless and should be removed.  It's not about the number of tests.
+
+I appreciate your enthusiasm for testing but we can test thoroughly without
+necessarily needing dozens or hundreds of tests.  Focused tests that you've
+seen fail are important and show that you understand the code and its workings.
+
+Go back through your tests and see how many you can make fail by introducing
+errors in the functional code.  If there are tests that always fail together
+then some are redundant and basically dead, useless code.
+
+13/15

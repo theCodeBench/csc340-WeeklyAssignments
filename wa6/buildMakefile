@@ -1,0 +1,247 @@
+#!/usr/bin/perl -w
+#** @file buildMakefile.pl
+#   @brief A simple perl script to generate Makefiles
+#
+# @author Paul Hinker
+#
+# @date Oct. 4, 2015
+#
+#  A simple perl script to build a makefile from a working directory
+#  This is only going to work on systems that have perl (obviously)
+#  and an installed GNU g++ tool chain.  Nothing particularly fancy
+#  here, just a bit of a time saver when creating a makefile from 
+#  an existing workspace.
+#
+#** @class main
+#*
+
+use Getopt::Long;
+
+&GetOptions('lib=s@', \@lib, 'h!', \$help);
+
+# Check the directory for C++ source files
+@SourceFiles = `ls *.cpp`;
+
+if ($#SourceFiles == -1)
+{
+   print "\n\nUsage : $0 [-lib \"-llib1 -llib2 -llib3\"]\n";
+   print "\nThe script will search the .cpp files in the current directory\n";
+   print "and try to determine which has the definition for main.  If no \n";
+   print "entry for main is found, an error is issued.  If multiple files \n";
+   print "contain the main entry point, the first will be chosen as the main\n";
+   print "file but compilation will probably fail due to multiple main entry\n";
+   print "points.\n";
+   print "\nAn optional parameter [-lib] can be added to the command line\n";
+   print "and the script will populate the Makefile \$LIBS macro with the \n";
+   print "value that follows the -lib option e.g.:\n\n";
+   print "$0 -lib \"-lGLU -lGL -lglut -lm\"\n\n";
+   print "Will cause the libGLU, libGL, libglut, and libm libraries to be added\n";
+   exit (-1);
+}
+
+my $targetSource = "";
+
+# Libraries are hard to sort out with a simple script like this so just
+# allow the user to set an environment variable AUTOBUILDLIBS or use
+# the -lib command line option to give the script help in creating the
+# LIBS macro.
+
+if (!defined $ENV{AUTOBUILDLIBS} && $#lib == -1 && $help)
+{
+   print "If your application needs specific libraries you can either\n";
+   print "set the AUTOBUILDLIBS environment variable:\n";
+   print "\n% export AUTOBUILDLIBS=\"-lglut -lGLU -lGL -lm\"\n\n";
+   print " or use the -lib command line option on this script :\n\n";
+   print "buildMakefile.pl -lib \"-lglut -lGLU -lGL -lm\"\n\n";
+   print "Or edited the generated Makefile and add them\n";
+}
+
+# First, let's see if we can figure out which source file has main in
+# it so we can set the main target
+
+foreach my $file (@SourceFiles)
+{
+   my $cFile = $file;
+   chomp($cFile);
+
+# A simplistic grep to discover if a file has the main() function in it
+# This can obviously be fooled but it will catch a large fraction of the
+# cases.  One thing that will fool this is if multiple source files have
+# a main() function.  In that case, the first one (lexigraphically) will
+# be the one chose as the main target and you will get linker errors
+# because main will be defined more than once in the .o files that
+# get linked for the main target.
+
+   my $result = `grep "int main(" $cFile`;
+   my $result2 = `grep "int main (" $cFile`;
+   if ($result ne "" || $result2 ne "")
+   {
+      if ($targetSource ne "")
+      {
+         print "Multiple files were found with a 'main' entry point.  It is\n";
+         print "unlikely that the executable will build and run correctly\n";
+      }
+      else
+      {
+         $targetSource = $cFile;
+      }
+   }
+}
+
+if ($targetSource eq "")
+{
+   print "Could not find a file with the main entry point\n";
+   print "Are you missing some source files?\n";
+   exit(-1);
+}
+
+$targetSource =~ s/(.+).cpp$/$1/;
+
+#
+# Ok, let's generate the Makefile
+#
+
+open MAKEFILE, "> Makefile" || die "Can't open file named 'Makefile' in current directory : $!\n";
+
+generateHeader();
+generateCompiler();
+generateFlags();
+generateTargets();
+generateIncludeRules();
+
+close(MAKEFILE);
+
+#** @function public generateIncludeRules
+#   @brief Use g++'s -M option to generate dependencies
+#
+# Use the compiler to figure out the include file dependencies and connect
+# them to the associated source files.  This prevents the case where changes
+# to an include file do not cause the dependent sources to get rebuilt
+# which can be a source of great confusion.
+#*
+sub generateIncludeRules
+{
+   print MAKEFILE "\%.d: \%.cpp\n";
+   print MAKEFILE "\t\@set -e; /usr/bin/rm -rf \$@;\$(GCC) -MM \$< \$(CXXFLAGS) > \$@\n\n";
+}
+
+#** @function generateTargets
+#   @brief Generate all, clean, debug, tar, and help targets
+#
+# Add some useful targets.  Debug, Clean, Tar, All, and the main target
+# as well as a Help target to print out the available targets
+#*
+sub generateTargets
+{
+# Targets like clean and all are 'phoney' targets which means they do not
+# have a file name / executable name corresponding to them.  In other words
+# they never get 'built' so those targets will build every time they are
+# invoked.  The .phony attribute is probably overkill in this case since
+# it tries to avoid conflicts with files/directories of the same name.  Another
+# reason for .phony is to avoid certain problems that come up when doing
+# recursive or parallel makes.  If you're doing that, this script is probably
+# not sufficient for your needs (although it might be a starting point)
+
+   print MAKEFILE ".PHONY: clean\n\n";
+ 
+# Main target
+   print MAKEFILE "# Targets include all, clean, debug, tar\n\n";
+   print MAKEFILE "all : $targetSource\n\n";
+   print MAKEFILE "$targetSource: \$(OBJS)\n";
+   print MAKEFILE "\t\$(LINK) -o \$@ \$^ \$(LIBS)\n\n";
+
+# clean
+   print MAKEFILE "clean:\n\trm -rf *.o *.d core $targetSource\n\n";
+
+# debug
+   print MAKEFILE "debug: CXXFLAGS = -DDEBUG -g -std=c++11\n";
+   print MAKEFILE "debug: $targetSource\n\n";
+
+#tar
+   print MAKEFILE "tar: clean\n";
+   print MAKEFILE "\ttar zcvf $targetSource.tgz \$(SOURCE) *.h Makefile\n\n";
+
+#help
+   print MAKEFILE "help:\n";
+   print MAKEFILE "\t\@echo \"\tmake $targetSource  - same as make all\"\n";
+   print MAKEFILE "\t\@echo \"\tmake all   - builds the main target\"\n";
+   print MAKEFILE "\t\@echo \"\tmake       - same as make all\"\n";
+   print MAKEFILE "\t\@echo \"\tmake clean - remove .o .d core $targetSource\"\n";
+   print MAKEFILE "\t\@echo \"\tmake debug - make all with -g and -DDEBUG\"\n";
+   print MAKEFILE "\t\@echo \"\tmake tar   - make a tarball of .cpp and .h files\"\n";
+   print MAKEFILE "\t\@echo \"\tmake help  - this message\"\n\n";
+   print MAKEFILE "-include \$(SOURCE:.cpp=.d)\n\n";
+}
+
+#** @function generateFlags
+#   @brief Set some basic compiler flags and define the LIBS macro
+#
+# Edit this subroutine if you generally want different compiler flags
+# This is a reasonable starting point and you can always edit the makefile
+# after it's generated.
+#*
+sub generateFlags
+{
+   print MAKEFILE "# Compiler flags\n";
+   print MAKEFILE "INC =";
+   print MAKEFILE " $ENV{AUTOBUILDINCS}" if (defined $ENV{AUTOBUILDINCS});
+   print MAKEFILE "\nCFLAGS = -Wall -O3 -std=c++11 \$(INC)\n";
+   print MAKEFILE "CXXFLAGS = \$(CFLAGS)\n\n";
+
+# One thing that's hard to figure out is what (if any) special libraries
+# are required by an executable.  Right now we'll just output the macro
+# so it can be easily filled in.  It might be possible to complete the
+# Makefile (as far as possible) then us it to try and build the main
+# target, capturing the output of the link to see if there are unsatisfied
+# external references.  If so, then search the system to try and find them.
+# As of now, either set the AUTOBUILDLIBS environment variable, add the
+# -lib command line option, or edit the generated Makefile to set them
+ 
+   print MAKEFILE "# Fill in special libraries needed here\n";
+   if (defined $ENV{AUTOBUILDLIBS})
+   {
+      print MAKEFILE "LIBS = $ENV{AUTOBUILDLIBS}";
+   }
+   else
+   {
+      # If you want the makefile to use any libraries by default, add them
+      # here
+      print MAKEFILE "LIBS ="; 
+   }
+   print MAKEFILE " @lib" if ($#lib != -1);
+   print MAKEFILE "\n\n";  
+}
+
+#** @function generateCompiler
+#   @brief purely boilerplate to set the GCC and LINK macros
+#
+# Boilerplate compiler and linker macros
+#*
+sub generateCompiler
+{
+   print MAKEFILE "#GNU C/C++ Compiler\n";
+   print MAKEFILE "GCC = g++\n\n";
+   print MAKEFILE "# GNU C/C++ Linker\n";
+   print MAKEFILE "LINK = g++\n\n";
+}
+
+# ** @function generateHeader
+#    @brief Gather up .cpp files in the directory to build the SOURCES macro
+#
+# At the beginning of the script all the .cpp files in the directory
+# were gathered.  Use those files to build the SOURCES and OBJS macros
+#*
+sub generateHeader
+{
+    print MAKEFILE "SOURCE = ";
+    foreach my $file(@SourceFiles)
+    {
+       my $cFile = $file;
+       chomp($cFile);
+       print MAKEFILE "         " if ($file ne $SourceFiles[0]);
+       print MAKEFILE $cFile;
+       print MAKEFILE " \\\n" if ($file ne $SourceFiles[-1]);
+    }
+    print MAKEFILE "\n\n";
+    print MAKEFILE "OBJS = \$(SOURCE:.cpp=.o)\n\n";
+}

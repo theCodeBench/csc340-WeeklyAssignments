@@ -1,0 +1,30 @@
+#This script looks for html files of the design "firstnameLastname.html" and extracts the classes
+#and information for the student pertaining to each class.  It then funnels this information into
+#a file named "firstnameLastname.txt".  
+#It does not account for duplicate classes, it records the information from both.
+
+ls *.html | 
+while read -r file; do 
+    filename=$(echo $file | sed -r 's/.{5}$//')
+    filename+=".txt"
+    cat $file | while read line
+    do
+        if [[ $line == *"<p id=\"VAR_STC_COURSE_NAME_"* ]]; then
+            class=$(echo $line | cut -d ">" -f 2 | cut -d "<" -f 1 | sed -e 's/\s\+/:/' | sed -e 's/\s\+/:/')
+            class+=":"
+        fi
+        if [[ $line == *"<p id=\"VAR_STC_VERIFIED_GRADE_"* ]]; then
+            class+=$(echo $line | cut -d ">" -f 2 | cut -d "<" -f 1)
+            class+=":"
+        fi
+        if [[ $line == *"<p id=\"VAR_STC_CMPL_CRED_"* ]]; then
+            class+=$(echo $line | cut -d ">" -f 2 | cut -d "<" -f 1)
+            class+=":"
+        fi
+        if [[ $line == *"<p id=\"VAR_STC_TERM_"* ]]; then
+            class+=$(echo $line | cut -d ">" -f 2 | cut -d "<" -f 1)
+            echo $class >> $filename
+        fi
+    done
+done
+

@@ -1,0 +1,26 @@
+#This program takes a list of files and creates an organized file directory
+#It then places the files into their correct folders based on the following system:
+#Volume Number Folder
+#-->Year
+#   -->Month
+#      -->Day
+#         -->FileNumber.txt
+#This uses the original file name, which is FileNumber_VolumeNumber_Date.txt
+
+#First, extract the volume number between the two underscores ('_'), and create a folder
+#with this number for each file, if that folder hasn't already been made.  
+
+#Second, place each file into it's correct volume folder while creating these folders.
+
+#Third, Go into each volume folder and, for each text file, extract the string after the 
+#second underscore, and (as needed) create a folder with the first 4 characters, within
+#this one create a folder with the next 2 characters, and within this create a folder 
+#with the last two characters and place the file into this last folder. 
+
+#Before starting on the next file, remove everything after the first underscore, as well 
+#as the underscore itself, from the file name.
+
+#Complexity Analysis:
+#This program does 1 initial pass, which is O(n), then up to 4 actions on each file again,
+#(year folder, month folder, day folder, trim name) which would be O(4n).  The combination
+# of these two functions is O(n + 4n) = O(n).
